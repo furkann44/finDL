@@ -1,5 +1,6 @@
 .env
 .streamlit/secrets.toml
+DEPLOY_STREAMLIT_CLOUD.md
 .venv/
 venv/
 __pycache__/
