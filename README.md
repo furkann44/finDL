@@ -24,6 +24,21 @@ pip install -r requirements.txt
 TWELVE_DATA_API_KEY=your_api_key_here
 ```
 
+Dashboard login ayari icin `.streamlit/secrets.toml.example` dosyasini referans alin. Yerel ornek:
+
+```toml
+[auth]
+username = "admin"
+password = "change-me"
+```
+
+Alternatif olarak environment variable da kullanabilirsiniz:
+
+```bash
+set STREAMLIT_AUTH_USERNAME=admin
+set STREAMLIT_AUTH_PASSWORD=change-me
+```
+
 ## Ilk Faz Komutlari
 
 Sadece `BTC/USD` icin:
@@ -83,6 +98,10 @@ Dashboard calistirmak icin:
 ```bash
 streamlit run streamlit_app.py
 ```
+
+Streamlit Community Cloud deploy adimlari icin:
+
+- `DEPLOY_STREAMLIT_CLOUD.md`
 
 Dashboard icinde:
 

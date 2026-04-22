@@ -4,6 +4,7 @@ import pandas as pd
 import streamlit as st
 
 from src.dashboard_actions import STEP_LABELS, prepare_pipeline_commands, run_pipeline
+from src.streamlit_auth import authenticated_user, init_auth_state, is_authenticated, load_auth_settings, logout, render_login_screen
 from src.dashboard_data import (
     available_assets,
     available_models,
@@ -571,13 +572,26 @@ def render_management_tab(selected_asset: str) -> None:
 
 
 def main() -> None:
+    init_auth_state()
+    auth_settings = load_auth_settings()
+    if not is_authenticated():
+        render_login_screen(auth_settings)
+        return
+
     st.title("Financial Direction Dashboard")
     st.caption("Arastirma ciktilarini urun prototipine yaklastiran interaktif izleme ve karsilastirma arayuzu")
 
     assets = ["All Assets", *available_assets()]
     default_models = available_models(include_weighted=False)
+    holdout_empty = get_holdout_summary().empty
+    backtest_empty = get_backtest_summary().empty
 
     with st.sidebar:
+        st.success(f"Giris yapan kullanici: {authenticated_user()}")
+        if st.button("Cikis Yap", use_container_width=True):
+            logout()
+            st.rerun()
+        st.divider()
         st.header("Filtreler")
         selected_asset = st.selectbox("Varlik", options=assets, index=0)
         selected_models = st.multiselect("Metotlar", options=default_models, default=default_models)
@@ -594,6 +608,11 @@ def main() -> None:
     if not selected_models:
         st.warning("En az bir model secin.")
         return
+
+    if holdout_empty and backtest_empty:
+        st.info(
+            "Bu ortamda henuz uretilmis artifact bulunmuyor. Ilk kurulum icin `Management` sekmesinden veri ve model pipeline'ini calistirin."
+        )
 
     tabs = st.tabs(
         [

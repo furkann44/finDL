@@ -6,9 +6,9 @@ from pathlib import Path
 import pandas as pd
 
 try:
-    from .config import ALL_SYMBOLS, BACKTESTS_DIR, FIGURES_DIR, METRICS_DIR, PREDICTIONS_DIR
+    from .config import ALL_SYMBOLS, BACKTESTS_DIR, FIGURES_DIR, METRICS_DIR, MODEL_NAMES, PREDICTIONS_DIR
 except ImportError:
-    from config import ALL_SYMBOLS, BACKTESTS_DIR, FIGURES_DIR, METRICS_DIR, PREDICTIONS_DIR
+    from config import ALL_SYMBOLS, BACKTESTS_DIR, FIGURES_DIR, METRICS_DIR, MODEL_NAMES, PREDICTIONS_DIR
 
 
 def _read_csv(path: Path) -> pd.DataFrame:
@@ -17,12 +17,34 @@ def _read_csv(path: Path) -> pd.DataFrame:
     return pd.read_csv(path)
 
 
+def _read_csv_or_empty(path: Path, columns: list[str]) -> pd.DataFrame:
+    if not path.exists():
+        return pd.DataFrame(columns=columns)
+    return pd.read_csv(path)
+
+
 def _sanitize_symbol(symbol: str) -> str:
     return symbol.lower().replace("/", "_").replace(" ", "")
 
 
 def load_holdout_summary(include_weighted: bool = True) -> pd.DataFrame:
-    frame = _read_csv(METRICS_DIR / "model_summary.csv")
+    frame = _read_csv_or_empty(
+        METRICS_DIR / "model_summary.csv",
+        [
+            "symbol",
+            "asset_group",
+            "model",
+            "split",
+            "accuracy",
+            "precision",
+            "recall",
+            "f1",
+            "roc_auc",
+            "loss",
+            "positive_rate",
+            "predicted_positive_rate",
+        ],
+    )
     frame = frame[frame["symbol"].isin(ALL_SYMBOLS)].copy()
     if not include_weighted:
         frame = frame[~frame["model"].str.contains("balanced", na=False)].copy()
@@ -79,7 +101,21 @@ def ensure_window_columns(frame: pd.DataFrame) -> pd.DataFrame:
 
 
 def load_backtest_summary(include_weighted: bool = True) -> pd.DataFrame:
-    frame = _read_csv(BACKTESTS_DIR / "backtest_summary.csv")
+    frame = _read_csv_or_empty(
+        BACKTESTS_DIR / "backtest_summary.csv",
+        [
+            "symbol",
+            "model",
+            "coverage",
+            "total_return",
+            "benchmark_return",
+            "annualized_return",
+            "annualized_volatility",
+            "sharpe",
+            "max_drawdown",
+            "win_rate",
+        ],
+    )
     frame = frame[frame["symbol"].isin(ALL_SYMBOLS)].copy()
     if not include_weighted:
         frame = frame[~frame["model"].str.contains("balanced", na=False)].copy()
@@ -122,23 +158,101 @@ def load_rolling_retrain_equity(symbol: str, model_name: str) -> pd.DataFrame:
 
 def load_no_trade_summary(optimize_for: str = "total_return") -> pd.DataFrame:
     file_name = "no_trade_summary.csv" if optimize_for == "active_f1" else f"no_trade_summary_{optimize_for}.csv"
-    frame = _read_csv(METRICS_DIR / file_name)
+    frame = _read_csv_or_empty(
+        METRICS_DIR / file_name,
+        [
+            "symbol",
+            "model",
+            "optimize_for",
+            "lower_threshold",
+            "upper_threshold",
+            "validation_coverage",
+            "validation_active_f1",
+            "validation_active_accuracy",
+            "validation_total_return",
+            "test_coverage",
+            "test_active_f1",
+            "test_active_accuracy",
+            "test_total_return",
+            "test_sharpe",
+            "test_max_drawdown",
+            "test_win_rate",
+            "test_predicted_long_rate",
+            "test_predicted_short_rate",
+        ],
+    )
     frame = frame[frame["symbol"].isin(ALL_SYMBOLS)].copy()
     return attach_test_window(frame)
 
 
 def load_threshold_tuning_summary() -> pd.DataFrame:
-    frame = _read_csv(METRICS_DIR / "threshold_tuning_summary.csv")
+    frame = _read_csv_or_empty(
+        METRICS_DIR / "threshold_tuning_summary.csv",
+        [
+            "symbol",
+            "model",
+            "best_threshold",
+            "validation_f1_default",
+            "validation_f1_tuned",
+            "test_f1_default",
+            "test_f1_tuned",
+            "test_f1_gain",
+            "test_accuracy_default",
+            "test_accuracy_tuned",
+            "test_accuracy_gain",
+            "test_roc_auc",
+            "predicted_positive_rate_default",
+            "predicted_positive_rate_tuned",
+        ],
+    )
     return frame[frame["symbol"].isin(ALL_SYMBOLS)].copy()
 
 
 def load_walk_forward_baseline_summary() -> pd.DataFrame:
-    frame = _read_csv(METRICS_DIR / "walk_forward_summary.csv")
+    frame = _read_csv_or_empty(
+        METRICS_DIR / "walk_forward_summary.csv",
+        [
+            "asset_group",
+            "symbol",
+            "model",
+            "validation_scheme",
+            "effective_folds",
+            "total_test_rows",
+            "accuracy",
+            "f1",
+            "roc_auc",
+            "accuracy_mean",
+            "accuracy_std",
+            "f1_mean",
+            "f1_std",
+            "roc_auc_mean",
+            "roc_auc_std",
+        ],
+    )
     return frame[frame["symbol"].isin(ALL_SYMBOLS)].copy()
 
 
 def load_walk_forward_sequence_summary() -> pd.DataFrame:
-    frame = _read_csv(METRICS_DIR / "sequence_walk_forward_summary.csv")
+    frame = _read_csv_or_empty(
+        METRICS_DIR / "sequence_walk_forward_summary.csv",
+        [
+            "asset_group",
+            "symbol",
+            "model",
+            "effective_folds",
+            "best_threshold_mean",
+            "best_threshold_std",
+            "accuracy",
+            "f1",
+            "roc_auc",
+            "accuracy_mean",
+            "accuracy_std",
+            "f1_mean",
+            "f1_std",
+            "roc_auc_mean",
+            "roc_auc_std",
+        ],
+    )
     return frame[frame["symbol"].isin(ALL_SYMBOLS)].copy()
 
 
@@ -177,6 +291,42 @@ def latest_prediction_snapshot(models: list[str] | None = None) -> pd.DataFrame:
 def build_recommendation_table() -> pd.DataFrame:
     holdout_test = load_holdout_summary(include_weighted=False)
     holdout_test = holdout_test[holdout_test["split"] == "test"].copy()
+    if holdout_test.empty:
+        return pd.DataFrame(
+            columns=[
+                "symbol",
+                "asset_group",
+                "best_holdout_model",
+                "holdout_accuracy",
+                "holdout_f1",
+                "holdout_roc_auc",
+                "recommended_model",
+                "recommended_lower_threshold",
+                "recommended_upper_threshold",
+                "recommended_total_return",
+                "recommended_sharpe",
+                "recommended_coverage",
+                "recommended_test_start",
+                "recommended_test_end",
+                "recommended_test_rows",
+                "recommended_active_trade_days",
+                "recommended_active_f1",
+                "recommended_active_accuracy",
+                "best_backtest_model",
+                "best_backtest_total_return",
+                "best_backtest_sharpe",
+                "best_backtest_test_rows",
+                "best_rolling_model",
+                "best_rolling_base_model",
+                "best_rolling_total_return",
+                "best_rolling_sharpe",
+                "best_rolling_coverage",
+                "best_rolling_test_start",
+                "best_rolling_test_end",
+                "best_rolling_signal_rows",
+                "recommendation_alignment",
+            ]
+        )
     holdout_best = (
         holdout_test.sort_values(["symbol", "roc_auc"], ascending=[True, False])
         .drop_duplicates("symbol")
@@ -369,9 +519,12 @@ def build_asset_detail(symbol: str) -> dict[str, object]:
 
 
 def available_assets() -> list[str]:
-    return sorted(load_holdout_summary(include_weighted=True)["symbol"].dropna().unique().tolist())
+    holdout_assets = sorted(load_holdout_summary(include_weighted=True)["symbol"].dropna().unique().tolist())
+    return holdout_assets or list(ALL_SYMBOLS)
 
 
 def available_models(include_weighted: bool = True) -> list[str]:
     models = sorted(load_holdout_summary(include_weighted=include_weighted)["model"].dropna().unique().tolist())
-    return models
+    if models:
+        return models
+    return list(MODEL_NAMES)
